@@ -25,15 +25,16 @@ async function handleGetTabName(tab, sendResponse) {
 
     const tabKey = `tab_${tab.id}`;
     const urlKey = `url_${tab.url}`;
+    const wasOpenedFromAnotherTab = typeof tab.openerTabId === "number";
 
     const data = await getStorage([tabKey, urlKey]);
 
     if (data[tabKey]) {
         // Found explicit name for this tab session
         sendResponse({ name: data[tabKey] });
-    } else if (data[urlKey]) {
+    } else if (data[urlKey] && !wasOpenedFromAnotherTab) {
         // Found fallback name for this URL
-        // "Adopt" this name for the current tab session
+        // Adopt this name for the current tab session
         await setStorage({ [tabKey]: data[urlKey] });
         sendResponse({ name: data[urlKey] });
     } else {
@@ -82,14 +83,14 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
         if (data[tabKey]) {
             const customName = data[tabKey];
 
-            // Re-apply the title
+            // Re-apply the title (it might have been reset by navigation)
             chrome.scripting.executeScript({
                 target: { tabId: tabId },
                 func: (name) => { document.title = name; },
                 args: [customName]
             });
 
-            // Update the URL key for persistence
+            // Update the URL key for persistence (so if we restart on this new URL, it works)
             if (tab.url) {
                 const urlKey = `url_${tab.url}`;
                 await setStorage({ [urlKey]: customName });
